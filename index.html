@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Bird Adventure Final</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #0b0b18; font-family: sans-serif; color: white; }
+        canvas { display: block; }
+        .ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; }
+        .btn { padding: 15px 30px; margin: 10px; font-size: 30px; cursor: pointer; border: none; border-radius: 12px; pointer-events: auto; background: #ff4757; color: white; font-weight: bold; transition: 0.2s; box-shadow: 0 4px #c0392b; }
+        .btn:hover { transform: scale(1.1); background: #ff6b81; }
+        .btn:active { transform: translateY(2px); box-shadow: 0 2px #c0392b; }
+        #score { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-size: 50px; font-weight: bold; color: #f1c40f; z-index: 10; text-shadow: 2px 2px 5px rgba(0,0,0,0.5); }
+        #game-over, #menu, #countdown { display: none; }
+        #menu { display: flex; }
+        .btn-menu { background: #4b4b4b; box-shadow: 0 4px #222; }
+    </style>
+</head>
+<body>
+
+<div id="score">0</div>
+
+<div id="menu" class="ui">
+    <h1 style="font-size: 60px; color: #f1c40f; text-shadow: 4px 4px #000;">BIRD FLY</h1>
+    <button class="btn" onclick="startGame()">ИГРАТЬ</button>
+</div>
+
+<div id="countdown" class="ui" style="font-size: 100px;"></div>
+
+<div id="game-over" class="ui" style="background: rgba(0,0,0,0.7);">
+    <h2 style="font-size: 50px; color: #ff4757; margin-bottom: 20px;">ИГРА ОКОНЧЕНА</h2>
+    <div style="display: flex;">
+        <button class="btn" onclick="startGame()" title="Начать заново">🔄</button>
+        <button class="btn btn-menu" onclick="location.reload()" title="В меню">☰</button>
+    </div>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let bird, pipes, enemies, bullets, score, gameRunning, frame, mouseY = canvas.height/2;
+
+    window.onmousemove = (e) => mouseY = e.clientY;
+
+    function startGame() {
+        document.getElementById('menu').style.display = 'none';
+        document.getElementById('game-over').style.display = 'none';
+        const cd = document.getElementById('countdown');
+        cd.style.display = 'flex';
+        let count = 3;
+        
+        const timer = setInterval(() => {
+            cd.innerText = count > 0 ? count : "ГО!";
+            if(count < 0) {
+                clearInterval(timer);
+                cd.style.display = 'none';
+                init();
+            }
+            count--;
+        }, 600);
+    }
+
+    function init() {
+        bird = { x: 150, y: canvas.height/2, rotation: 0 };
+        pipes = []; enemies = []; bullets = [];
+        score = 0; frame = 0; gameRunning = true;
+        animate();
+    }
+
+    function drawBird() {
+        ctx.save();
+        ctx.translate(bird.x, bird.y);
+        
+        // Наклон птицы за мышкой
+        let targetRot = (mouseY - bird.y) * 0.08;
+        bird.rotation += (targetRot - bird.rotation) * 0.1;
+        ctx.rotate(Math.max(-0.6, Math.min(0.6, bird.rotation)));
+
+        // 1. Тело (Желтое)
+        ctx.fillStyle = "#f1c40f";
+        ctx.fillRect(-20, -15, 40, 30);
+
+        // 2. ГЛАЗ (Белый с черным зрачком)
+        ctx.fillStyle = "white";
+        ctx.fillRect(8, -10, 10, 10);
+        ctx.fillStyle = "black";
+        ctx.fillRect(13, -7, 5, 5);
+
+        // 3. КЛЮВ (Оранжевый треугольник)
+        ctx.fillStyle = "#e67e22";
+        ctx.beginPath();
+        ctx.moveTo(20, -5); 
+        ctx.lineTo(38, 0); 
+        ctx.lineTo(20, 5);
+        ctx.fill();
+
+        // 4. КРЫЛО (Машет красным)
+        let wingMove = Math.sin(frame * 0.4) * 12;
+        ctx.fillStyle = "#c0392b";
+        ctx.fillRect(-15, wingMove - 5, 18, 10);
+        
+        ctx.restore();
+    }
+
+    function animate() {
+        if(!gameRunning) return;
+
+        // Фон
+        ctx.fillStyle = "#1a1a2e";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Птица
+        bird.y += (mouseY - bird.y) * 0.12;
+        drawBird();
+
+        // ФАЗА 1: СТОЛБЫ
+        if (score < 25) {
+            if (frame % 90 === 0) {
+                let gap = 240;
+                let h = Math.random() * (canvas.height - 400) + 100;
+                pipes.push({ x: canvas.width, top: h, bottom: canvas.height - h - gap, w: 70 });
+            }
+        }
+
+        for(let i = pipes.length - 1; i >= 0; i--) {
+            let p = pipes[i];
+            p.x -= 8;
+
+            let moveY = (score >= 15) ? Math.sin(frame * 0.05) * 70 : 0;
+
+            ctx.fillStyle = "#2ecc71";
+            ctx.fillRect(p.x, 0, p.w, p.top + moveY); 
+            ctx.fillRect(p.x, canvas.height - p.bottom + moveY, p.w, p.bottom); 
+
+            if (bird.x + 15 > p.x && bird.x - 15 < p.x + p.w) {
+                if (bird.y - 12 < p.top + moveY || bird.y + 12 > canvas.height - p.bottom + moveY) gameRunning = false;
+            }
+            if (p.x + p.w < 0) { pipes.splice(i, 1); score++; }
+        }
+
+        // ФАЗА 2: ШАРЫ
+        if (score >= 25 && score < 35) {
+            if (frame % 25 === 0) enemies.push({ x: canvas.width, y: Math.random() * canvas.height, r: 20 });
+        }
+        enemies.forEach((e, i) => {
+            e.x -= 12;
+            ctx.fillStyle = "#e74c3c";
+            ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI*2); ctx.fill();
+            if (Math.hypot(bird.x - e.x, bird.y - e.y) < 25) gameRunning = false;
+            if (e.x < 0) { enemies.splice(i, 1); score++; }
+        });
+
+        // ФАЗА 3: ПУЛИ
+        if (score >= 35) {
+            if (frame % 35 === 0) bullets.push({ x: canvas.width, y: bird.y, w: 40, h: 8 });
+        }
+        bullets.forEach((b, i) => {
+            b.x -= 20;
+            ctx.fillStyle = "#f1c40f";
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+            if (b.x < bird.x + 20 && b.x + b.w > bird.x - 20 && Math.abs(b.y - bird.y) < 15) gameRunning = false;
+            if (b.x < 0) { bullets.splice(i, 1); score++; }
+        });
+
+        document.getElementById('score').innerText = score;
+        frame++;
+        
+        if(!gameRunning) document.getElementById('game-over').style.display = 'flex';
+        else requestAnimationFrame(animate);
+    }
+</script>
+</body>
+</html>
